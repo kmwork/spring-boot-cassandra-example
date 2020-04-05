@@ -1,0 +1,10 @@
+# ===============================
+# = DATA SOURCE
+# ===============================
+# Set here configurations for the database connection
+cassandra:
+  contact-points: localhost
+  keyspace-name: guru_keyspace
+  port: 9042
+  schema-action: create_if_not_exists
+

@@ -1,15 +1,14 @@
 package guru.springframework.config;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.PropertySource;
-import org.springframework.core.env.Environment;
-import org.springframework.data.cassandra.config.AbstractCassandraConfiguration;
-import org.springframework.data.cassandra.config.CassandraClusterFactoryBean;
-import org.springframework.data.cassandra.config.SchemaAction;
+import org.springframework.data.cassandra.config.*;
+import org.springframework.data.cassandra.core.convert.CassandraConverter;
+import org.springframework.data.cassandra.core.convert.MappingCassandraConverter;
 import org.springframework.data.cassandra.core.cql.keyspace.CreateKeyspaceSpecification;
 import org.springframework.data.cassandra.core.cql.keyspace.DropKeyspaceSpecification;
 import org.springframework.data.cassandra.core.mapping.CassandraMappingContext;
@@ -23,11 +22,19 @@ import java.util.List;
  * edit Konstantin (kmwork)
  */
 @Configuration
-@PropertySource(value = {"classpath:cassandra.properties"})
+@ConfigurationProperties(prefix = "cassandra")
 @EnableCassandraRepositories(basePackages = "guru.springframework.repositories")
+@Slf4j
 public class CassandraConfig extends AbstractCassandraConfiguration {
 
-    public static final String KEYSPACE = "guru_keyspace";
+    @Value("${cassandra.keyspace-name}")
+    protected String keyspaceName;
+
+    @Value("${cassandra.port}")
+    protected Integer cassandraPort;
+
+    @Value("${cassandra.contact-points}")
+    protected String cassandraPoints;
 
     @Override
     public SchemaAction getSchemaAction() {
@@ -35,45 +42,66 @@ public class CassandraConfig extends AbstractCassandraConfiguration {
     }
 
     @Override
+    protected String getKeyspaceName() {
+        return keyspaceName;
+    }
+
+    @Override
     protected List<CreateKeyspaceSpecification> getKeyspaceCreations() {
-        CreateKeyspaceSpecification specification = CreateKeyspaceSpecification.createKeyspace(KEYSPACE);
+        CreateKeyspaceSpecification specification = CreateKeyspaceSpecification.createKeyspace(keyspaceName);
 
         return Arrays.asList(specification);
     }
 
     @Override
     protected List<DropKeyspaceSpecification> getKeyspaceDrops() {
-        return Arrays.asList(DropKeyspaceSpecification.dropKeyspace(KEYSPACE));
+        return Arrays.asList(DropKeyspaceSpecification.dropKeyspace(keyspaceName));
     }
 
-    @Override
-    protected String getKeyspaceName() {
-        return KEYSPACE;
-    }
 
     @Override
     public String[] getEntityBasePackages() {
         return new String[]{"guru.springframework.domain"};
     }
 
-    private static final Log LOGGER = LogFactory.getLog(CassandraConfig.class);
-
-    @Autowired
-    private Environment environment;
 
     @Override
     @Bean
     public CassandraClusterFactoryBean cluster() {
         final CassandraClusterFactoryBean cluster = new CassandraClusterFactoryBean();
-        cluster.setContactPoints(environment.getProperty("cassandra.contactpoints"));
-        cluster.setPort(Integer.parseInt(environment.getProperty("cassandra.port")));
-        LOGGER.info("Cluster created with contact points [" + environment.getProperty("cassandra.contactpoints") + "] " + "& port [" + Integer.parseInt(environment.getProperty("cassandra.port")) + "].");
+        cluster.setContactPoints(cassandraPoints);
+        cluster.setPort(cassandraPort);
+        cluster.setJmxReportingEnabled(false);
+        log.info("Cluster created with contact points = {} & port = {}", cassandraPoints, cassandraPort);
         return cluster;
     }
 
     @Override
     @Bean
     public CassandraMappingContext cassandraMapping() throws ClassNotFoundException {
-        return new CassandraMappingContext();
+        CassandraMappingContext bean = new CassandraMappingContext();
+        bean.setInitialEntitySet(CassandraEntityClassScanner.scan(("guru.springframework.domain")));
+
+        return bean;
     }
+
+    @Bean
+    public CassandraConverter converter() throws ClassNotFoundException {
+        return new MappingCassandraConverter(cassandraMapping());
+    }
+
+    @SneakyThrows
+    @Override
+    @Bean
+    public CassandraSessionFactoryBean session() {
+
+        CassandraSessionFactoryBean session = new CassandraSessionFactoryBean();
+        session.setCluster(cluster().getObject());
+        session.setKeyspaceName(keyspaceName);
+        session.setConverter(converter());
+        session.setSchemaAction(SchemaAction.CREATE);
+
+        return session;
+    }
+
 }
