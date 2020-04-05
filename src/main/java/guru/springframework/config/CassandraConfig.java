@@ -99,7 +99,7 @@ public class CassandraConfig extends AbstractCassandraConfiguration {
         session.setCluster(cluster().getObject());
         session.setKeyspaceName(keyspaceName);
         session.setConverter(converter());
-        session.setSchemaAction(SchemaAction.CREATE);
+        session.setSchemaAction(getSchemaAction());
 
         return session;
     }

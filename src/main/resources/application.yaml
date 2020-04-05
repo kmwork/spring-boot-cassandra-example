@@ -6,5 +6,4 @@ cassandra:
   contact-points: localhost
   keyspace-name: guru_keyspace
   port: 9042
-  schema-action: create_if_not_exists
 
